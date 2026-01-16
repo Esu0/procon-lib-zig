@@ -124,47 +124,43 @@ pub fn ModIntEx(modulo: comptime_int, comptime modulo_is_prime: bool) type {
             return w.print("{d}", .{self.value});
         }
 
-        pub const Combination = CombinationInner(Self);
+        pub const Combination = struct {
+            const mem = std.mem;
+            factorial: []Self,
+            factorial_inv: []Self,
+
+            pub fn init(n: usize, allocator: mem.Allocator) mem.Allocator.Error!Combination {
+                const fact = try allocator.alloc(Self, n + 1);
+                errdefer allocator.free(fact);
+                const fact_i = try allocator.alloc(Self, n + 1);
+                fact[0] = .one;
+                for (1..n + 1) |i| {
+                    fact[i] = .init(i).mul(fact[i - 1]);
+                }
+                fact_i[n] = fact[n].inv();
+                var i = n;
+                while (i > 0) : (i -= 1) {
+                    fact_i[i - 1] = .init(i).mul(fact_i[i]);
+                }
+                return .{
+                    .factorial = fact,
+                    .factorial_inv = fact_i,
+                };
+            }
+
+            pub fn deinit(self: Combination, allocator: mem.Allocator) void {
+                allocator.free(self.factorial);
+                allocator.free(self.factorial_inv);
+            }
+
+            /// `n`個の中から`k`個選ぶときの組み合わせ数を返す
+            pub fn combi(self: Combination, n: usize, k: usize) Self {
+                return if (k > n) .zero else self.factorial[n].mul(self.factorial_inv[k]).mul(self.factorial_inv[n - k]);
+            }
+        };
     };
 }
 
-fn CombinationInner(comptime MInt: type) type {
-    return struct {
-        const mem = std.mem;
-        const Self = @This();
-        factorial: []MInt,
-        factorial_inv: []MInt,
-
-        pub fn init(n: usize, allocator: mem.Allocator) mem.Allocator.Error!Self {
-            const fact = try allocator.alloc(MInt, n + 1);
-            errdefer allocator.free(fact);
-            const fact_i = try allocator.alloc(MInt, n + 1);
-            fact[0] = MInt.one;
-            for (1..n + 1) |i| {
-                fact[i] = MInt.init(i).mul(fact[i - 1]);
-            }
-            fact_i[n] = fact[n].inv();
-            var i = n;
-            while (i > 0) : (i -= 1) {
-                fact_i[i - 1] = MInt.init(i).mul(fact_i[i]);
-            }
-            return .{
-                .factorial = fact,
-                .factorial_inv = fact_i,
-            };
-        }
-
-        pub fn deinit(self: Self, allocator: mem.Allocator) void {
-            allocator.free(self.factorial);
-            allocator.free(self.factorial_inv);
-        }
-
-        /// `n`個の中から`k`個選ぶときの組み合わせ数を返す
-        pub fn combi(self: Self, n: usize, k: usize) MInt {
-            return if (k > n) MInt.zero else self.factorial[n].mul(self.factorial_inv[k]).mul(self.factorial_inv[n - k]);
-        }
-    };
-}
 const testing = std.testing;
 const expectEqual = testing.expectEqual;
 
