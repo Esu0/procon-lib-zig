@@ -377,12 +377,12 @@ pub fn ModIntEx(modulo: comptime_int, comptime modulo_is_prime: bool) type {
                 const fact_i = try gpa.alloc(Self, n + 1);
                 fact[0] = .one;
                 for (1..n + 1) |i| {
-                    fact[i] = .init(i).mul(fact[i - 1]);
+                    fact[i] = Self.init(i).mul(fact[i - 1]);
                 }
                 fact_i[n] = fact[n].inv();
                 var i = n;
                 while (i > 0) : (i -= 1) {
-                    fact_i[i - 1] = .init(i).mul(fact_i[i]);
+                    fact_i[i - 1] = Self.init(i).mul(fact_i[i]);
                 }
                 return .{
                     .factorial = fact,
