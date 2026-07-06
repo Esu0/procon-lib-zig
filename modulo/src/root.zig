@@ -1,7 +1,11 @@
 //! By convention, root.zig is the root source file when making a library.
 const std = @import("std");
+const mem = std.mem;
 pub const convolution = @import("convolution.zig");
 
+comptime {
+    _ = convolution;
+}
 fn requiringBits(val: comptime_int) comptime_int {
     var cur = val;
     var count = 0;
@@ -141,23 +145,30 @@ pub fn ModIntEx(modulo: comptime_int, comptime modulo_is_prime: bool) type {
             return w.print("{d}", .{self.value});
         }
 
+        pub fn random(rng: std.Random) Self {
+            const value = rng.uintLessThan(Int, modulo - 1);
+            std.debug.assert(value < modulo);
+            return .{
+                .value = value,
+            };
+        }
+
         pub const Combination = struct {
-            const mem = std.mem;
             factorial: []Self,
             factorial_inv: []Self,
 
-            pub fn init(n: usize, allocator: mem.Allocator) mem.Allocator.Error!Combination {
-                const fact = try allocator.alloc(Self, n + 1);
-                errdefer allocator.free(fact);
-                const fact_i = try allocator.alloc(Self, n + 1);
+            pub fn init(n: usize, gpa: mem.Allocator) mem.Allocator.Error!Combination {
+                const fact = try gpa.alloc(Self, n + 1);
+                errdefer gpa.free(fact);
+                const fact_i = try gpa.alloc(Self, n + 1);
                 fact[0] = .one;
                 for (1..n + 1) |i| {
-                    fact[i] = .init(i).mul(fact[i - 1]);
+                    fact[i] = Self.init(i).mul(fact[i - 1]);
                 }
                 fact_i[n] = fact[n].inv();
                 var i = n;
                 while (i > 0) : (i -= 1) {
-                    fact_i[i - 1] = .init(i).mul(fact_i[i]);
+                    fact_i[i - 1] = Self.init(i).mul(fact_i[i]);
                 }
                 return .{
                     .factorial = fact,
@@ -165,9 +176,9 @@ pub fn ModIntEx(modulo: comptime_int, comptime modulo_is_prime: bool) type {
                 };
             }
 
-            pub fn deinit(self: Combination, allocator: mem.Allocator) void {
-                allocator.free(self.factorial);
-                allocator.free(self.factorial_inv);
+            pub fn deinit(self: Combination, gpa: mem.Allocator) void {
+                gpa.free(self.factorial);
+                gpa.free(self.factorial_inv);
             }
 
             /// `n`個の中から`k`個選ぶときの組み合わせ数を返す
