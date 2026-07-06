@@ -1,5 +1,6 @@
 //! By convention, root.zig is the root source file when making a library.
 const std = @import("std");
+pub const convolution = @import("convolution.zig");
 
 fn requiringBits(val: comptime_int) comptime_int {
     var cur = val;
@@ -8,22 +9,26 @@ fn requiringBits(val: comptime_int) comptime_int {
     return count;
 }
 
-pub fn ModInt(modulo: comptime_int) type {
-    if (modulo <= 0) @compileError("Modulo must be positive");
-    if (modulo > 100_000_000_000) @compileError("Cannot check primary of modulo");
+pub fn isPrime(number: comptime_int) bool {
+    if (number <= 0) @compileError("Modulo must be positive");
+    if (number > 100_000_000_000) @compileError("Cannot check primary of modulo");
     @setEvalBranchQuota(1_000_000);
     comptime var is_prime = false;
-    if (modulo >= 2) {
+    if (number >= 2) {
         var i = 2;
         is_prime = true;
-        while (i * i <= modulo) : (i += 1) {
-            if (modulo % i == 0) {
+        while (i * i <= number) : (i += 1) {
+            if (number % i == 0) {
                 is_prime = false;
                 break;
             }
         }
     }
-    return ModIntEx(modulo, is_prime);
+    return is_prime;
+}
+
+pub fn ModInt(modulo: comptime_int) type {
+    return ModIntEx(modulo, isPrime(modulo));
 }
 
 pub fn PrimeModInt(modulo: comptime_int) type {
@@ -34,8 +39,8 @@ pub fn ModIntEx(modulo: comptime_int, comptime modulo_is_prime: bool) type {
     if (modulo <= 0) @compileError("Modulo must be positive");
     return struct {
         const Self = @This();
-        const Int = std.meta.Int(.unsigned, requiringBits(modulo - 1));
-        const Extended = std.meta.Int(.unsigned, requiringBits(modulo - 1) + 1);
+        pub const Int = std.meta.Int(.unsigned, requiringBits(modulo - 1));
+        pub const Extended = std.meta.Int(.unsigned, requiringBits(modulo - 1) + 1);
         value: Int,
         pub const zero: Self = .{ .value = 0 };
         pub const one: Self = .{ .value = 1 };
@@ -48,6 +53,10 @@ pub fn ModIntEx(modulo: comptime_int, comptime modulo_is_prime: bool) type {
             };
         }
 
+        pub fn iadd(self: *Self, other: Self) void {
+            self.* = self.add(other);
+        }
+
         pub fn sub(self: Self, other: Self) Self {
             const a: Extended = self.value;
             const b: Extended = other.value;
@@ -56,11 +65,19 @@ pub fn ModIntEx(modulo: comptime_int, comptime modulo_is_prime: bool) type {
             };
         }
 
+        pub fn isub(self: *Self, other: Self) void {
+            self.* = self.sub(other);
+        }
+
         pub fn mul(self: Self, other: Self) Self {
             const prod = std.math.mulWide(Int, self.value, other.value);
             return .{
                 .value = @intCast(prod % modulo),
             };
+        }
+
+        pub fn imul(self: *Self, other: Self) void {
+            self.* = self.mul(other);
         }
 
         pub fn pow(self: Self, exp: anytype) Self {
