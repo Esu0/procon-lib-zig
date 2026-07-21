@@ -1,60 +1,11 @@
 const std = @import("std");
 const super = @import("root.zig");
+const ntt = @import("convolution/ntt.zig");
+const ModInt = super.ModInt;
 
-
-// impl Pcg32 {
-//     const fn new(state: u64, seq: u64) -> Self {
-//         let mut rng = Self { state: 0, inc: (seq << 1) | 1 };
-//         rng.next();
-//         rng.state = rng.state.wrapping_add(state);
-//         rng.next();
-//         rng
-//     }
-
-//     const fn next(&mut self) -> u32 {
-//         let old = self.state;
-//         self.state = old.wrapping_mul(6364136223846793005).wrapping_mul(self.inc);
-//         let xorshifted = (((old >> 18) ^ old) >> 27) as u32;
-//         let rot = (old >> 59) as u32;
-//         xorshifted.rotate_right(rot)
-//     }
-
-//     const fn rand(&mut self, bound: u32) -> u32 {
-//         let threshold = bound.wrapping_neg() % bound;
-//         loop {
-//             let r = self.next();
-//             if r >= threshold {
-//                 return r % bound;
-//             }
-//         }
-//     }
-// }
-const Pcg32 = struct {
-    const Self = @This();
-    state: u64,
-    inc: u64,
-
-    pub fn init(state: u64, seq: u64) Self {
-        var rng: Self = .{ .state = state, .inc = (seq << 1) | 1 };
-        _ = rng.next();
-        rng.state +%= rng.state;
-        _ = rng.next();
-        return rng;
-    }
-
-    pub fn next(self: *Self) u32 {
-        const old = self.state;
-        self.state = old *% 6364136223846793005 +% self.inc;
-
-        const xor_s: u32 = @truncate(((old >> 18) ^ old) >> 27);
-        const rot: u32 = @intCast(old >> 59);
-
-        return (xor_s >> @as(u5, @intCast(rot))) | (xor_s << @as(u5, @intCast((0 -% rot) & 31)));
-    }
-
-    
-
-};
+comptime {
+    _ = ntt;
+}
 
 fn comptimeCtz(x: comptime_int) comptime_int {
     var val = x;
@@ -92,7 +43,7 @@ pub fn RootsPowerOf2(modulo: comptime_int) type {
     const log = comptimeCtz(modulo - 1);
     const r = find_root(modulo);
     return struct {
-        const MInt = super.ModInt(modulo);
+        const MInt = ModInt(modulo);
         const Self = @This();
         pub const root = blk: {
             var t = r;
@@ -121,10 +72,37 @@ pub fn RootsPowerOf2(modulo: comptime_int) type {
             // @compileLog(t);
             break :blk buf;
         };
+
+        /// returns (2^e)th root
+        /// 1^(2^-e)
+        pub fn getRoot(self: Self, e: u32, inv: bool) MInt {
+            _ = self;
+            std.debug.assert(e <= log);
+            return if (inv) invd[log - e] else root[log - e];
+        }
+
+        pub fn nttInplace(self: Self, buf: []MInt, inv: bool, comptime bit_reverse_order: ntt.Port) void {
+            ntt.nttInplace(modulo, buf, self, inv, bit_reverse_order);
+        }
     };
 }
 
+fn convolutionNaive(modulo: comptime_int, a: []const ModInt(modulo), b: []const ModInt(modulo), c: []ModInt(modulo)) void {
+    std.debug.assert(a.len == b.len and b.len == c.len);
+    for (0..c.len) |i| {
+        var sum: ModInt(modulo) = .zero;
+        for (0..a.len) |j| {
+            const k = (i + a.len - j) % a.len;
+            sum.iadd(a[j].mul(b[k]));
+        }
+        c[i] = sum;
+    }
+}
+
 const testing = std.testing;
+const expectEqual = testing.expectEqual;
+const expectEqualSlices = testing.expectEqualSlices;
+
 test "find root" {
     const gpa = testing.allocator;
     {
@@ -136,8 +114,8 @@ test "find root" {
             _ = try set.getOrPut(t.value);
             t.imul(r);
         }
-        try testing.expectEqual(1, t.value);
-        try testing.expectEqual(16, set.count());
+        try expectEqual(1, t.value);
+        try expectEqual(16, set.count());
     }
     {
         const r = comptime find_root(137);
@@ -148,8 +126,8 @@ test "find root" {
             _ = try set.getOrPut(t.value);
             t.imul(r);
         }
-        try testing.expectEqual(1, t.value);
-        try testing.expectEqual(8, set.count());
+        try expectEqual(1, t.value);
+        try expectEqual(8, set.count());
     }
 }
 
@@ -160,4 +138,28 @@ test "Calculate Root" {
         _ = R.root;
         _ = R.invd;
     }
+}
+
+test "convolution" {
+    const MInt = ModInt(998244353);
+    var xoshiro = std.Random.DefaultPrng.init(testing.random_seed);
+    const rng = xoshiro.random();
+    const log = 5;
+    var a: [1<<log]MInt = undefined;
+    var b: [1<<log]MInt = undefined;
+    for (0..1<<log) |i| {
+        a[i] = .random(rng);
+        b[i] = .random(rng);
+    }
+    var c: [1<<log]MInt = undefined;
+    convolutionNaive(MInt.mod, &a, &b, &c);
+    const roots = RootsPowerOf2(MInt.mod){};
+    roots.nttInplace(&a, false, .out);
+    roots.nttInplace(&b, false, .out);
+    const sz_inv = MInt.init(1<<log).inv();
+    for (0..1<<log) |i| {
+        a[i].imul(b[i].mul(sz_inv));
+    }
+    roots.nttInplace(&a, true, .in);
+    try expectEqualSlices(MInt, &c, &a);
 }

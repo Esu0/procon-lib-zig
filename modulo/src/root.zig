@@ -48,6 +48,7 @@ pub fn ModIntEx(modulo: comptime_int, comptime modulo_is_prime: bool) type {
         value: Int,
         pub const zero: Self = .{ .value = 0 };
         pub const one: Self = .{ .value = 1 };
+        pub const mod: comptime_int = modulo;
 
         pub fn add(self: Self, other: Self) Self {
             const a: Extended = self.value;
