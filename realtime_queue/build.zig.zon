@@ -1,0 +1,7 @@
+.{
+    .name = .realtime_queue,
+    .version = "0.0.1",
+    .minimum_zig_version = "0.16.0",
+    .paths = .{""},
+    .fingerprint = 0xf95ab5930fe1d7a6,
+}
